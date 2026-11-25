@@ -1,3 +1,38 @@
+# Dependencies
 node_modules/
-.env
+.pnpm-store/
+
+# Build outputs
 dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment & Secrets (NEVER commit keys, API tokens, or seed phrases!)
+.env
+.env.*
+!.env.example
+*.skey
+*.vkey
+*.seed
+*.mnemonic
+*.pem
+*.key
+secrets/
+wallets/
+
+# Aiken / Midnight generated artifacts
+packages/cardano-settlement/aiken/build/
+packages/midnight-privacy/contracts/managed/
+*.zkir
+*.prover
+*.verifier
+
+# Logs & OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/

@@ -1,0 +1,14 @@
+{
+  "name": "@zk-turnover/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "echo \"Member 4: initialize Next.js or Vite React UI inside apps/web (uses createGatewayClient from src/gatewayClient.ts)\""
+  },
+  "dependencies": {
+    "@zk-turnover/contracts-spec": "*"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "zk-turnover",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Veil402 (CoinCeylon/zk-turnover) — ZK-Gated Pay-Per-Call API & Data Marketplace on Cardano (x402 + Aiken) and Midnight (Compact ZK)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CoinCeylon/zk-turnover.git"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "build:spec": "npm --workspace=@zk-turnover/contracts-spec run build",
+    "test:spec": "npm --workspace=@zk-turnover/contracts-spec run test",
+    "build": "npm run build:spec && npm --workspaces --if-present run build",
+    "typecheck": "npm run build:spec && npm --workspaces --if-present run typecheck",
+    "dev:gateway": "npm --workspace=@zk-turnover/api-gateway run dev",
+    "test:gateway": "npm --workspace=@zk-turnover/api-gateway run test",
+    "dev:midnight": "npm --workspace=@zk-turnover/midnight-privacy run dev",
+    "test:midnight": "npm --workspace=@zk-turnover/midnight-privacy run test",
+    "dev:cardano": "npm --workspace=@zk-turnover/cardano-settlement run dev",
+    "test:cardano": "npm --workspace=@zk-turnover/cardano-settlement run test",
+    "dev:web": "npm --workspace=@zk-turnover/web run dev",
+    "build:web": "npm --workspace=@zk-turnover/web run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}
