@@ -6,50 +6,50 @@ import type {
   ZkAccessProofRequest,
   ZkProofVerificationResult,
 } from "@zk-turnover/contracts-spec";
+import { MidnightPrivacyClient, type MidnightClientConfig } from "./midnight-client.js";
+
+export * from "./witness.js";
+export * from "./midnight-client.js";
 
 /**
- * Member 2 implements this live adapter backed by `contracts/access_gate.compact`,
- * Midnight.js 5.0.0, and the local Docker Proof Server (port 6300).
+ * Live Midnight adapter backed by `contracts/privacy_app.compact`,
+ * off-chain witness sanitization (`witness.ts`), and the local Docker Proof Server.
  */
 export class LiveMidnightAdapter implements MidnightAdapter {
   readonly mode = "live" as const;
+  private readonly client: MidnightPrivacyClient;
 
-  constructor(
-    private readonly config: {
-      proofServerUrl: string;
-      contractAddress: string;
-      indexerUrl?: string;
-      nodeUrl?: string;
-    },
-  ) {}
-
-  async getIssuerMerkleRoot(): Promise<string> {
-    throw new Error(
-      `LiveMidnightAdapter.getIssuerMerkleRoot not yet wired (contract: ${this.config.contractAddress})`,
-    );
+  constructor(config: MidnightClientConfig) {
+    this.client = new MidnightPrivacyClient(config);
   }
 
-  async issueDemoCredential(_input: IssueCredentialInput): Promise<IssuedCredentialReceipt> {
-    throw new Error("LiveMidnightAdapter.issueDemoCredential not yet wired");
+  getClient(): MidnightPrivacyClient {
+    return this.client;
+  }
+
+  async getIssuerMerkleRoot(): Promise<string> {
+    return this.client.getIssuerMerkleRoot();
+  }
+
+  async issueDemoCredential(input: IssueCredentialInput): Promise<IssuedCredentialReceipt> {
+    return this.client.issueDemoCredential(input);
   }
 
   async revokeCredential(
-    _credentialId: string,
+    credentialId: string,
   ): Promise<{ revoked: boolean; issuerMerkleRoot: string }> {
-    throw new Error("LiveMidnightAdapter.revokeCredential not yet wired");
+    return this.client.revokeCredential(credentialId);
   }
 
-  async generateAccessProof(_request: ZkAccessProofRequest): Promise<ZkAccessProofPayload> {
-    throw new Error(
-      `LiveMidnightAdapter.generateAccessProof not yet wired (proofServer: ${this.config.proofServerUrl})`,
-    );
+  async generateAccessProof(request: ZkAccessProofRequest): Promise<ZkAccessProofPayload> {
+    return this.client.generateAccessProof(request);
   }
 
   async verifyAccessProof(
-    _proof: ZkAccessProofPayload,
-    _expectedPolicyId: string,
-    _expectedEpoch: number,
+    proof: ZkAccessProofPayload,
+    expectedPolicyId: string,
+    expectedEpoch: number,
   ): Promise<ZkProofVerificationResult> {
-    throw new Error("LiveMidnightAdapter.verifyAccessProof not yet wired");
+    return this.client.verifyAccessProof(proof, expectedPolicyId, expectedEpoch);
   }
 }
