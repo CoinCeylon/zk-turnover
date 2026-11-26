@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "npm run build && node dist/index.js",
-    "test": "npm run typecheck"
+    "test": "npm run build && node --test dist/midnight-privacy.test.js"
   },
   "dependencies": {
     "@zk-turnover/contracts-spec": "*"

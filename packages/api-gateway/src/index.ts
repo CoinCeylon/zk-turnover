@@ -6,6 +6,8 @@ import {
   type MidnightAdapter,
 } from "@zk-turnover/contracts-spec";
 
+export * from "./middleware/zkAuthMiddleware.js";
+
 export interface GatewayRuntimeAdapters {
   midnight: MidnightAdapter;
   cardano: CardanoAdapter;

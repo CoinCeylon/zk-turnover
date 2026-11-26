@@ -1,0 +1,165 @@
+// Veil402 — Midnight Privacy & ZK Access Gate Circuit
+// Target: Compact 0.36.0
+//
+// Proves organization compliance eligibility (license tier, jurisdiction bitmask,
+// non-expiry, Merkle inclusion, and epoch rate-limit slot) without revealing
+// `org_secret` or organization identity. Outputs a deterministic, unlinkable
+// `nullifier_hash` per (org_secret, endpoint_id, epoch, call_index).
+
+pragma language_version >= 0.16 && <= 0.36.0;
+
+import CompactStandardLibrary;
+
+export struct EndpointPolicy {
+  min_tier: Uint<8>;
+  allowed_jurisdiction_mask: Uint<32>;
+  max_calls_per_epoch: Uint<32>;
+}
+
+// -----------------------------------------------------------------------------
+// Public Ledger State (On-Chain Midnight)
+// -----------------------------------------------------------------------------
+export ledger issuer_merkle_root: Bytes<32>;
+export ledger endpoint_policies: Map<Bytes<32>, EndpointPolicy>;
+export ledger spent_nullifiers: Set<Bytes<32>>;
+export ledger issuer_authority: Bytes<32>;
+
+// -----------------------------------------------------------------------------
+// Private Witness Providers (Off-Chain Local Device)
+// -----------------------------------------------------------------------------
+witness org_secret(): Bytes<32>;
+witness license_tier(): Uint<8>;
+witness jurisdiction_code(): Uint<32>;
+witness expiry_epoch(): Uint<64>;
+witness call_index(): Uint<32>;
+witness merkle_path(): MerkleTreePath<16, Bytes<32>>;
+
+// -----------------------------------------------------------------------------
+// Internal Pure Helpers
+// -----------------------------------------------------------------------------
+pure function compute_credential_commitment(
+  secret: Bytes<32>,
+  tier: Uint<8>,
+  jurisdiction: Uint<32>,
+  expiry: Uint<64>
+): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([
+    secret,
+    pad(32, "tier") ^ (tier as Field as Bytes<32>),
+    pad(32, "jur") ^ (jurisdiction as Field as Bytes<32>),
+    pad(32, "exp") ^ (expiry as Field as Bytes<32>)
+  ]);
+}
+
+pure function compute_nullifier_hash(
+  secret: Bytes<32>,
+  endpoint_id: Bytes<32>,
+  epoch: Uint<64>,
+  slot_index: Uint<32>
+): Bytes<32> {
+  return persistentHash<Vector<5, Bytes<32>>>([
+    pad(32, "veil402:nullifier"),
+    secret,
+    endpoint_id,
+    pad(32, "epoch") ^ (epoch as Field as Bytes<32>),
+    pad(32, "call") ^ (slot_index as Field as Bytes<32>)
+  ]);
+}
+
+// Checks whether two 32-bit jurisdiction bitmasks share at least one allowed bit.
+// Bitmasks use JURISDICTION_FLAGS: LK=1, EU=2, UK=4, US=8, SG=16, GLOBAL=31.
+pure function has_matching_jurisdiction(
+  cred_mask: Uint<32>,
+  allowed_mask: Uint<32>
+): Boolean {
+  // Check each of the 5 supported jurisdiction bits (1, 2, 4, 8, 16)
+  const b0 = ((cred_mask as Field) != 0) && ((allowed_mask as Field) != 0);
+  const lk = (((cred_mask / 1) % 2) == 1) && (((allowed_mask / 1) % 2) == 1);
+  const eu = (((cred_mask / 2) % 2) == 1) && (((allowed_mask / 2) % 2) == 1);
+  const uk = (((cred_mask / 4) % 2) == 1) && (((allowed_mask / 4) % 2) == 1);
+  const us = (((cred_mask / 8) % 2) == 1) && (((allowed_mask / 8) % 2) == 1);
+  const sg = (((cred_mask / 16) % 2) == 1) && (((allowed_mask / 16) % 2) == 1);
+  return b0 && (lk || eu || uk || us || sg);
+}
+
+// -----------------------------------------------------------------------------
+// Circuit Lifecycle & Governance
+// -----------------------------------------------------------------------------
+constructor(initial_merkle_root: Bytes<32>, authority: Bytes<32>) {
+  issuer_merkle_root = disclose(initial_merkle_root);
+  issuer_authority = disclose(authority);
+}
+
+export circuit update_merkle_root(new_merkle_root: Bytes<32>): [] {
+  issuer_merkle_root = disclose(new_merkle_root);
+}
+
+export circuit register_endpoint_policy(
+  policy_id: Bytes<32>,
+  min_tier: Uint<8>,
+  allowed_jurisdiction_mask: Uint<32>,
+  max_calls_per_epoch: Uint<32>
+): [] {
+  const pid = disclose(policy_id);
+  endpoint_policies.insert(
+    pid,
+    EndpointPolicy {
+      min_tier: disclose(min_tier),
+      allowed_jurisdiction_mask: disclose(allowed_jurisdiction_mask),
+      max_calls_per_epoch: disclose(max_calls_per_epoch)
+    }
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Primary ZK Access Verification Circuit
+// -----------------------------------------------------------------------------
+export circuit verify_access(
+  policy_id: Bytes<32>,
+  endpoint_id: Bytes<32>,
+  current_epoch: Uint<64>
+): Bytes<32> {
+  const pid = disclose(policy_id);
+  const eid = disclose(endpoint_id);
+  const epoch = disclose(current_epoch);
+
+  assert(endpoint_policies.member(pid), "Unknown endpoint policy");
+  const policy = endpoint_policies.lookup(pid);
+
+  // Read private witness inputs (never disclosed on-chain)
+  const secret = org_secret();
+  const tier = license_tier();
+  const jurisdiction = jurisdiction_code();
+  const expiry = expiry_epoch();
+  const slot = call_index();
+  const path = merkle_path();
+
+  // 1. Verify credential commitment is included in the active Issuer Merkle root
+  const commitment = compute_credential_commitment(secret, tier, jurisdiction, expiry);
+  const computed_root = merkleTreePathRoot<16, Bytes<32>>(path, commitment);
+  assert(computed_root == issuer_merkle_root, "Credential not in active issuer_merkle_root");
+
+  // 2. Enforce license tier requirement
+  assert(tier >= policy.min_tier, "License tier below endpoint minimum");
+
+  // 3. Enforce jurisdiction bitmask intersection
+  assert(
+    has_matching_jurisdiction(jurisdiction, policy.allowed_jurisdiction_mask),
+    "Jurisdiction not permitted by endpoint policy"
+  );
+
+  // 4. Enforce credential non-expiry
+  assert(epoch <= expiry, "Compliance credential expired");
+
+  // 5. Enforce per-epoch rate-limit slot bounds
+  assert(slot < policy.max_calls_per_epoch, "Call index exceeds max_calls_per_epoch");
+
+  // 6. Compute deterministic, unlinkable nullifier for this (secret, endpoint, epoch, slot)
+  const nullifier_hash = disclose(compute_nullifier_hash(secret, eid, epoch, slot));
+
+  // 7. Reject nullifier replay / double-spend
+  assert(!spent_nullifiers.member(nullifier_hash), "Nullifier already spent");
+  spent_nullifiers.insert(nullifier_hash);
+
+  return nullifier_hash;
+}
